@@ -34,9 +34,11 @@ Import-Module ps2exe
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutputPath) | Out-Null
 
-# Try to embed the Claude icon if the app is installed.
+# Try to embed the Claude icon if the app is installed (Anthropic's package only,
+# same publisher pin as Launch-Claude.ps1).
 $iconArg = @{}
 $pkg = Get-AppxPackage -Name '*Claude*' -ErrorAction SilentlyContinue |
+    Where-Object PublisherId -eq 'pzs8sxrjxfjjc' |
     Sort-Object Version -Descending | Select-Object -First 1
 if ($pkg) {
     $iconExe = Join-Path $pkg.InstallLocation 'app\Claude.exe'
