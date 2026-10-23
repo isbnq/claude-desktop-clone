@@ -318,10 +318,9 @@ không cần Python.
 
 ## Contributing
 
-`develop` is the integration branch; `master` is the stable, published state. Branch `feature/*`
-or `bug/*` off `develop` and PR into `develop`; branch `hotfix/*` off `master` for urgent fixes.
-Merging `develop → master` releases, and `sync-develop.yml` merges `master` back into `develop`.
-CI runs PSScriptAnalyzer on every PR. See [CLAUDE.md](CLAUDE.md#git-workflow) for details.
+`master` is the only long-lived branch and the published state. Branch `feature/*` or `bug/*` off
+`master`, open a PR into `master`, and merge it with a merge commit. See
+[CLAUDE.md](CLAUDE.md#git-workflow) for details.
 
 ## License
 
