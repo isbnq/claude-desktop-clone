@@ -16,10 +16,12 @@ its own login.
    `C:\Program Files\WindowsApps\Claude_<version>_x64__<hash>\app\Claude.exe`.
    The version segment changes on every update, and that folder is
    permission-restricted for directory listing. Always resolve the path via
-   `Get-AppxPackage -Name '*Claude*'` and read `.InstallLocation`. Only fall
-   back to a `WindowsApps\Claude_*__*\app\Claude.exe` glob if the Appx query
-   fails. **Never hard-code the versioned path** — it will break on the next
-   update.
+   `Get-AppxPackage -Name '*Claude*'` filtered to Anthropic's
+   `PublisherId -eq 'pzs8sxrjxfjjc'` and read `.InstallLocation`. Only fall
+   back to a `WindowsApps\Claude_*__pzs8sxrjxfjjc\app\Claude.exe` glob if the
+   Appx query fails. **Never hard-code the versioned path** — it will break on
+   the next update. **Never drop the publisher filter** — without it any
+   package with "Claude" in its name could be launched instead.
 
 2. **Isolation = a distinct `--user-data-dir`.** This is the entire trick. Two
    shortcuts must point at two different data directories. Don't "optimize" by
@@ -37,6 +39,37 @@ its own login.
    a `Bitmap` → write a 32-bit **PNG-based `.ico`** by hand. Do **not** use
    `Icon.Save()`: saving an icon built from an `HICON` drops the colour plane and
    writes only the 1-bit mask, producing a grey icon.
+
+5. **Profile data dirs are only deleted if Setup marked them.** A profile name
+   maps to `%APPDATA%\<name>` and `Uninstall.ps1 -RemoveData` deletes it
+   recursively, so both scripts accept only plain names
+   (`^[A-Za-z0-9_-]+( [A-Za-z0-9_-]+)*$`, comma-split because `-File` passes
+   `A,B` as one string). `Setup.ps1` writes a `.claude-desktop-clone` marker
+   into each data dir it creates and refuses an existing unmarked dir (another
+   app's folder) unless a `Claude (<name>)` shortcut already points at it
+   (pre-marker install, adopted). `Uninstall.ps1` deletes only marked dirs and
+   never `%APPDATA%\Claude`. Don't loosen any of these checks.
+
+6. **Quote `--user-data-dir`.** `Start-Process -ArgumentList` doesn't quote, so
+   an unquoted path with a space (a `Client A` profile, a `C:\Users\Jane Doe`
+   home) reaches `Claude.exe` as two arguments. `Launch-Claude.ps1` passes
+   `--user-data-dir="<dir>"` with any trailing `\` trimmed (it would escape the
+   closing quote).
+
+7. **`claude://` links always land in the default profile.** Windows activates
+   the MSIX protocol handler without `--user-data-dir`, so the browser's
+   "Open Claude" sign-in link never reaches a cloned profile. The fix is to
+   launch `Claude.exe --user-data-dir=<dir> "<claude:// link>"`: Chromium's
+   singleton forwards argv to the running instance, whose `second-instance`
+   handler accepts `claude://` arguments. `Launch-Claude.ps1 -Url` does that;
+   `Send-ClaudeLink.ps1 -Profile <name>` reads the link from the clipboard
+   (extracting it from surrounding text), requires that profile to be running,
+   and never prints it (it's a one-time sign-in code). The Google sign-in link
+   (`claude://login/google-auth?code=…&hop_nonce=…`) is only accepted by the
+   instance that started the sign-in, within 30 minutes; any other instance
+   logs "does not answer a sign-in this app started; ignoring". "Open Claude"
+   is a script button, not a link, so users copy it from the DevTools console
+   line "Launched external handler for '…'".
 
 ## Optional second isolation layer (`CLAUDE_CONFIG_DIR`)
 
@@ -58,10 +91,11 @@ store, which is the default. Don't make it mandatory or hard-code a path.
 
 ```
 scripts/
-  Launch-Claude.ps1   # resolve exe + Start-Process with --user-data-dir; optional -ConfigDir sets CLAUDE_CONFIG_DIR
+  Launch-Claude.ps1   # resolve exe + Start-Process with --user-data-dir; optional -ConfigDir sets CLAUDE_CONFIG_DIR; optional -Url passes a claude:// link
   launch.vbs          # run the .ps1 hidden (no console window); finds the .ps1 next to itself; optional 2nd arg = config dir
-  Setup.ps1           # installer: copies scripts to %USERPROFILE%\ClaudeProfiles\bin, extracts a stable bin\claude.ico, makes profiles + desktop shortcuts; -ConfigDir hashtable maps a profile to its own memory store
-  Uninstall.ps1       # removes shortcuts (and optionally profile data)
+  Send-ClaudeLink.ps1 # hand a copied claude:// link (browser sign-in) to a running profile; Setup copies it into bin\
+  Setup.ps1           # installer: copies scripts to %USERPROFILE%\ClaudeProfiles\bin, extracts a stable bin\claude.ico, makes marked profiles + desktop shortcuts; -ConfigDir hashtable maps a profile to its own memory store
+  Uninstall.ps1       # removes shortcuts (and optionally marked profile data)
   Build-Exe.ps1       # optional: wrap Launch-Claude.ps1 into an .exe via ps2exe
 ```
 
@@ -90,7 +124,7 @@ Get-CimInstance Win32_Process -Filter "Name='Claude.exe'" |
     Select-Object ProcessId, CommandLine
 ```
 
-A successful run shows `Claude.exe --user-data-dir=...\claude-test` and creates
+A successful run shows `Claude.exe --user-data-dir="...\claude-test"` and creates
 a populated `claude-test` folder (Local Storage, lockfile, etc.).
 
 To verify config isolation, add `-ConfigDir` and confirm the env var reaches the
