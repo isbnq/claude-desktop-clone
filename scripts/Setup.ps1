@@ -186,6 +186,7 @@ $binDir = Join-Path $InstallDir 'bin'
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 Copy-Item (Join-Path $scriptRoot 'Launch-Claude.ps1') $binDir -Force
 Copy-Item (Join-Path $scriptRoot 'launch.vbs') $binDir -Force
+Copy-Item (Join-Path $scriptRoot 'Send-ClaudeLink.ps1') $binDir -Force
 $vbs = Join-Path $binDir 'launch.vbs'
 
 # --- Extract the Claude icon to a STABLE path (survives app updates) -------
@@ -243,3 +244,5 @@ foreach ($name in $Profile) {
 Write-Host ""
 Write-Host "Done. Open each shortcut and sign in to the matching account." -ForegroundColor Green
 Write-Host "Tip: clicking a shortcut again just focuses that profile's window (single instance per profile)."
+Write-Host "Tip: if browser sign-in's 'Open Claude' brings up the wrong window, copy that link and run:"
+Write-Host "     powershell -ExecutionPolicy Bypass -File `"$binDir\Send-ClaudeLink.ps1`" -Profile <name>"

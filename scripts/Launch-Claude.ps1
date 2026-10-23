@@ -27,7 +27,14 @@ param(
     # Optional: give this instance its own Claude Code / Cowork config + memory
     # store by pointing CLAUDE_CONFIG_DIR at a dedicated directory. Useful to
     # keep a personal profile's memory separate from a work one.
-    [string]$ConfigDir
+    [string]$ConfigDir,
+
+    # Optional: a claude:// link (e.g. the browser's "Open Claude" sign-in link)
+    # to hand to this profile. Windows always opens claude:// links in the
+    # default profile, so an isolated one only gets them passed like this; if
+    # the profile is already running, Chromium forwards the link to that window.
+    # Send-ClaudeLink.ps1 wraps this for the clipboard.
+    [string]$Url
 )
 
 function Show-Error {
@@ -68,6 +75,11 @@ if (-not $exe -or -not (Test-Path $exe)) {
     exit 1
 }
 
+if ($Url -and $Url -notmatch '^claude://[^\s"]+$') {
+    Show-Error "Not a claude:// link: only links that start with claude:// can be passed to Claude."
+    exit 1
+}
+
 # Ensure the isolated data directory exists.
 New-Item -ItemType Directory -Force -Path $ProfileDir | Out-Null
 
@@ -80,4 +92,9 @@ if ($ConfigDir) {
 }
 
 # Launch. Different --user-data-dir => separate singleton lock => parallel instance.
-Start-Process -FilePath $exe -ArgumentList "--user-data-dir=$ProfileDir"
+# Start-Process doesn't quote arguments, so quote the dir ourselves: unquoted, a
+# path with a space (C:\Users\Jane Doe\...) reaches Claude.exe as two arguments.
+# A trailing backslash would escape the closing quote, so trim it.
+$argList = @("--user-data-dir=`"$($ProfileDir.TrimEnd('\'))`"")
+if ($Url) { $argList += "`"$Url`"" }
+Start-Process -FilePath $exe -ArgumentList $argList
