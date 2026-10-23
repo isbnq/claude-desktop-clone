@@ -17,7 +17,10 @@
     in again for your main account.
 
 .PARAMETER Profile
-    One or more profile names. Default: Work, Personal.
+    One or more profile names. Default: Work, Personal. Letters, digits, spaces,
+    '-' and '_' only (each name becomes a folder under %APPDATA%). A name whose
+    %APPDATA%\<name> folder already exists but wasn't created by this script is
+    refused, so a profile can never land in another app's folder.
 
 .PARAMETER InstallDir
     Where the launcher scripts (bin\) live. Default: %USERPROFILE%\ClaudeProfiles.
@@ -55,6 +58,24 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# Anthropic's MSIX publisher ID (the hash in Claude_<version>_x64__<id>). Only a
+# package signed by Anthropic is accepted as the Claude app.
+$anthropicPublisherId = 'pzs8sxrjxfjjc'
+
+# Written into every profile data dir this script creates. Uninstall.ps1
+# -RemoveData only deletes folders that contain it.
+$markerName = '.claude-desktop-clone'
+
+# Profile names become folders under %APPDATA% (and Uninstall.ps1 -RemoveData
+# deletes that folder), so allow plain names only -- no separators, no "..".
+# `powershell -File` passes "A,B" as one string, so split on commas here too.
+$Profile = @($Profile -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+foreach ($name in $Profile) {
+    if ($name -notmatch '^[A-Za-z0-9_-]+( [A-Za-z0-9_-]+)*$') {
+        throw "Invalid profile name '$name'. Use only letters, digits, spaces, '-' and '_'."
+    }
+}
 
 # Extracts the highest-resolution icon out of an .exe into a standalone .ico.
 # This is what makes shortcut icons survive app updates: the Claude .exe lives
@@ -130,12 +151,35 @@ public static extern bool DestroyIcon(IntPtr hIcon);
 
 # --- Verify the Claude Desktop app is installed and find its icon ---------
 $pkg = Get-AppxPackage -Name '*Claude*' -ErrorAction SilentlyContinue |
+    Where-Object PublisherId -eq $anthropicPublisherId |
     Sort-Object Version -Descending | Select-Object -First 1
 if (-not $pkg) {
     throw "Claude Desktop app not found. Install it from https://claude.ai/download (or the Microsoft Store) first."
 }
 $iconExe = Join-Path $pkg.InstallLocation 'app\Claude.exe'
 Write-Host "Found Claude $($pkg.Version) at $($pkg.InstallLocation)" -ForegroundColor Green
+
+# --- Check every profile's data dir before changing anything -------------
+$desktop = [Environment]::GetFolderPath('Desktop')
+$wsh = New-Object -ComObject WScript.Shell
+
+foreach ($name in $Profile) {
+    if ($ReuseDefaultForWork -and $name -ieq 'Work') { continue }
+    if ($name -ieq 'Claude') {
+        throw "Profile name 'Claude' is reserved: %APPDATA%\Claude is the regular app's login. Use -ReuseDefaultForWork to share it."
+    }
+    $dataDir = Join-Path $env:APPDATA $name
+    if ((Test-Path $dataDir) -and -not (Test-Path (Join-Path $dataDir $markerName))) {
+        # Not ours -- unless a "Claude (<name>)" shortcut already points at it,
+        # i.e. an earlier version of this script (before the marker) made it.
+        $lnkPath = Join-Path $desktop "Claude ($name).lnk"
+        $madeByUs = (Test-Path $lnkPath) -and
+            $wsh.CreateShortcut($lnkPath).Arguments.IndexOf("`"$dataDir`"", [StringComparison]::OrdinalIgnoreCase) -ge 0
+        if (-not $madeByUs) {
+            throw "$dataDir already exists and was not created by this script (it may belong to another app). Pick a different profile name. If it really is a Claude profile from an earlier setup, create an empty '$markerName' file in it and re-run."
+        }
+    }
+}
 
 # --- Copy launcher scripts to a stable location ---------------------------
 $binDir = Join-Path $InstallDir 'bin'
@@ -158,9 +202,6 @@ if (Export-AppIcon -ExePath $iconExe -IcoPath $icoPath) {
 }
 
 # --- Create a profile + desktop shortcut for each name --------------------
-$desktop = [Environment]::GetFolderPath('Desktop')
-$wsh = New-Object -ComObject WScript.Shell
-
 foreach ($name in $Profile) {
     if ($ReuseDefaultForWork -and $name -ieq 'Work') {
         $dataDir = Join-Path $env:APPDATA 'Claude'
@@ -177,6 +218,7 @@ foreach ($name in $Profile) {
         # -ReuseDefaultForWork "Work" profile already behaves).
         $dataDir = Join-Path $env:APPDATA $name
         New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+        Set-Content -Path (Join-Path $dataDir $markerName) -Value 'Created by claude-desktop-clone Setup.ps1. Uninstall.ps1 -RemoveData only deletes profile folders that contain this file.'
         Write-Host "  [$name] isolated profile at $dataDir"
     }
 

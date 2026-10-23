@@ -12,8 +12,10 @@
 
 .PARAMETER RemoveData
     Also delete the isolated profile data directories (this signs you out and
-    erases that profile's local history). The "Work" profile that reuses
-    %APPDATA%\Claude is never deleted.
+    erases that profile's local history). Only folders that Setup.ps1 created
+    (they contain a '.claude-desktop-clone' marker file) are deleted; anything
+    else is left alone. %APPDATA%\Claude -- the regular app's login, which a
+    -ReuseDefaultForWork "Work" profile shares -- is never deleted.
 #>
 [CmdletBinding()]
 param(
@@ -21,6 +23,19 @@ param(
     [string]$InstallDir = (Join-Path $env:USERPROFILE 'ClaudeProfiles'),
     [switch]$RemoveData
 )
+
+# Setup.ps1 writes this into every data dir it creates; -RemoveData only deletes
+# folders that contain it.
+$markerName = '.claude-desktop-clone'
+
+# Same rule as Setup.ps1: plain names only, so %APPDATA%\<name> can never point
+# somewhere else (e.g. "..") before it's deleted recursively.
+$Profile = @($Profile -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+foreach ($name in $Profile) {
+    if ($name -notmatch '^[A-Za-z0-9_-]+( [A-Za-z0-9_-]+)*$') {
+        throw "Invalid profile name '$name'. Use only letters, digits, spaces, '-' and '_'."
+    }
+}
 
 $desktop = [Environment]::GetFolderPath('Desktop')
 
@@ -34,12 +49,14 @@ foreach ($name in $Profile) {
     if ($RemoveData) {
         # Profile data lives under %APPDATA%\<name> (see Setup.ps1), not -InstallDir.
         $dataDir = Join-Path $env:APPDATA $name
-        if ($name -ieq 'Work' -or $dataDir -ieq (Join-Path $env:APPDATA 'Claude')) {
+        if ($dataDir -ieq (Join-Path $env:APPDATA 'Claude')) {
             # %APPDATA%\Claude is the main login shared with the Start-menu app.
             Write-Host "Skipping data removal for '$name' (shared main login)." -ForegroundColor DarkYellow
-        } elseif (Test-Path $dataDir) {
+        } elseif (Test-Path (Join-Path $dataDir $markerName)) {
             Remove-Item $dataDir -Recurse -Force
             Write-Host "Removed profile data: $dataDir" -ForegroundColor Yellow
+        } elseif (Test-Path $dataDir) {
+            Write-Warning "Not removing $dataDir`: it has no '$markerName' marker, so Setup.ps1 didn't create it. If it is a profile from an older Setup.ps1, re-run Setup.ps1 to mark it, or delete it by hand."
         }
     }
 }

@@ -40,10 +40,16 @@ function Show-Error {
     }
 }
 
+# Anthropic's MSIX publisher ID (the hash in Claude_<version>_x64__<id>). Pinning
+# it means a package from anyone else that merely has "Claude" in its name is
+# never launched.
+$anthropicPublisherId = 'pzs8sxrjxfjjc'
+
 # 1) Preferred: resolve via the Appx package (robust against version changes).
 $exe = $null
 try {
     $pkg = Get-AppxPackage -Name '*Claude*' -ErrorAction Stop |
+        Where-Object PublisherId -eq $anthropicPublisherId |
         Sort-Object Version -Descending | Select-Object -First 1
     if ($pkg) {
         $candidate = Join-Path $pkg.InstallLocation 'app\Claude.exe'
@@ -53,7 +59,7 @@ try {
 
 # 2) Fallback: scan WindowsApps directly (newest version first).
 if (-not $exe) {
-    $exe = Get-ChildItem 'C:\Program Files\WindowsApps\Claude_*__*\app\Claude.exe' -ErrorAction SilentlyContinue |
+    $exe = Get-ChildItem "C:\Program Files\WindowsApps\Claude_*__$anthropicPublisherId\app\Claude.exe" -ErrorAction SilentlyContinue |
         Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
 }
 

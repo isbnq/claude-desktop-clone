@@ -30,7 +30,8 @@ C:\Program Files\WindowsApps\Claude_<version>_x64__<hash>\app\Claude.exe
 ```
 
 The launcher resolves that path at runtime via `Get-AppxPackage` (so it survives
-app updates) and starts it with a chosen data directory:
+app updates), accepting only the package signed by Anthropic (publisher ID
+`pzs8sxrjxfjjc`), and starts it with a chosen data directory:
 
 ```powershell
 Claude.exe --user-data-dir="C:\Users\<you>\ClaudeProfiles\personal"
@@ -80,6 +81,11 @@ Both windows now run at the same time, fully isolated.
 powershell -ExecutionPolicy Bypass -File scripts\Setup.ps1 -Profile Personal,ClientA,ClientB
 ```
 
+Profile names may use letters, digits, spaces, `-` and `_`. Each one becomes the
+folder `%APPDATA%\<name>`, so Setup refuses a name whose folder already exists
+and belongs to something else (e.g. `Code`, `Microsoft`). `Claude` is reserved
+for the regular app's login.
+
 ### Different install location
 
 ```powershell
@@ -120,6 +126,7 @@ wscript.exe launch.vbs "<profile-data-dir>" "<claude-config-dir>"
 
 %APPDATA%\                     # profile DATA lives here (required for Cowork VM)
 ├── Personal\                 # isolated Chromium profile (login, history, cache, VM)
+│   └── .claude-desktop-clone # marker: "Setup made this" (Uninstall -RemoveData checks it)
 └── Work\                     # (only if not reusing the default login)
 
 Desktop\
@@ -177,6 +184,12 @@ powershell -ExecutionPolicy Bypass -File scripts\Uninstall.ps1
 powershell -ExecutionPolicy Bypass -File scripts\Uninstall.ps1 -RemoveData
 ```
 
+`-RemoveData` only deletes folders that `Setup.ps1` created — ones containing
+the `.claude-desktop-clone` marker. Any other folder is left alone with a
+warning, and `%APPDATA%\Claude` (the regular app's login) is never deleted.
+Profiles made by an older `Setup.ps1` have no marker yet; re-run `Setup.ps1`
+once to add it.
+
 ---
 
 ## Troubleshooting
@@ -184,6 +197,7 @@ powershell -ExecutionPolicy Bypass -File scripts\Uninstall.ps1 -RemoveData
 | Symptom | Fix |
 |---|---|
 | "Claude Desktop app not found" | Install it from [claude.ai/download](https://claude.ai/download) and run `Setup.ps1` again. |
+| "`%APPDATA%\<name>` already exists and was not created by this script" | That folder belongs to something else — pick another profile name. If it really is an old Claude profile whose shortcut you deleted, create an empty `.claude-desktop-clone` file in it and re-run `Setup.ps1`. |
 | Shortcut does nothing | Run `scripts\Launch-Claude.ps1 -ProfileDir <dir>` directly in PowerShell to see the error. |
 | Second window won't open | Make sure the two shortcuts use **different** `--user-data-dir` paths (check shortcut *Target*). |
 | Icon is blank or grey | Re-run `Setup.ps1` (current versions extract the icon to a stable `bin\claude.ico`, so it survives updates). If a stale thumbnail lingers, clear the icon cache: `ie4uinit.exe -show`, or `Stop-Process -Name explorer -Force; Start-Process explorer`. |
