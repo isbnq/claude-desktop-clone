@@ -138,33 +138,38 @@ child process:
 
 ## Git workflow
 
-Two long-lived branches, mirroring the `vodongha-personal` setup.
+This checkout is the fork `isbnq/claude-desktop-clone` (remote `origin`) of
+`vodongha/claude-desktop-clone` (remote `upstream`). One long-lived branch: `master`.
 
 ```
 feature/* ──┐
-bug/*    ──→  develop  →  PR → develop (merged)  →  PR → master
-hotfix/* ──────────────────────────────────────→  PR → master
-                                                        ↓
-                                          develop ← auto-synced by sync-develop.yml
+bug/*    ──→  PR → master
 ```
 
 | Branch type | Base branch | PR target | When to use |
 |---|---|---|---|
-| `feature/short-description` | `develop` | `develop` | New feature |
-| `bug/short-description` | `develop` | `develop` | Non-urgent fix |
-| `hotfix/short-description` | `master` | `master` | Urgent fix |
+| `feature/short-description` | `master` | `master` | New feature |
+| `bug/short-description` | `master` | `master` | Fix |
 
-- **`master` is the stable branch — never commit directly.** Feature/bug work goes through
-  `develop`; merge `develop → master` to release. Hotfixes branch from `master` and PR straight to
-  it; `develop` picks them up via `sync-develop.yml` (merges `master → develop` after every push to
-  `master`). There is no deploy — `master` is just the published, stable state.
-- `ci.yml` runs **PSScriptAnalyzer** (errors only) on pushes to `develop` and PRs to `master`.
-- Merge with **merge commits** (no squash/rebase). Personal repo — set the identity locally
-  (`git config --local user.email "vodongha@hotmail.com"`). AI-assisted commits are **authored by
-  `vodongha`** with **Claude as the committer**:
+- **`master` is the only long-lived branch and the published state — don't commit to it
+  directly.** Branch from `master`, open a PR into `master`, merge, delete the branch. There is no
+  `develop` and no deploy.
+- To take changes from the original repo: `git fetch upstream`, merge `upstream/master` into a
+  branch, PR it into `master`.
+- **No CI runs.** GitHub Actions is not enabled on this fork, so `ci.yml` (PSScriptAnalyzer) never
+  runs. `sync-develop.yml` is left over from upstream's develop/master model: if Actions were ever
+  enabled it would recreate `develop` on every push to `master`, so remove it first. Until then,
+  parse-check the scripts by hand before opening a PR:
+  ```powershell
+  Get-ChildItem scripts\*.ps1 | ForEach-Object { $e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$e); "$($_.Name): $($e.Count) parse errors" }
+  ```
+- Merge with **merge commits** (no squash/rebase). Set the identity locally so commits here don't
+  pick up a global one: `git config --local user.name isbnq` and
+  `git config --local user.email "302704351+isbnq@users.noreply.github.com"` (GitHub no-reply).
+  AI-assisted commits are **authored by `isbnq`** with **Claude as the committer**:
   ```bash
-  GIT_COMMITTER_NAME="Claude Opus 4.8" GIT_COMMITTER_EMAIL="noreply@anthropic.com" \
-    git commit --author="vodongha <vodongha@hotmail.com>" -m "..."
+  GIT_COMMITTER_NAME="Claude Opus 5.5" GIT_COMMITTER_EMAIL="noreply@anthropic.com" \
+    git commit --author="isbnq <302704351+isbnq@users.noreply.github.com>" -m "..."
   ```
 
 ## Out of scope
