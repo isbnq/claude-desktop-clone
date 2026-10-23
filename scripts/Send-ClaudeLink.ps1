@@ -7,9 +7,11 @@
     Windows opens claude:// links with the default Claude profile
     (%APPDATA%\Claude), so a profile made by Setup.ps1 never receives the link
     that finishes its browser sign-in: "Open Claude" brings up the main window
-    instead. Copy the link (right-click "Open Claude" -> Copy link address) and
-    run this script. It starts Claude.exe with that profile's --user-data-dir
-    plus the link, and the already-running instance picks the link up.
+    instead, which ignores it (it didn't start that sign-in). Copy the link --
+    "Open Claude" is a script button, so take it from the browser's DevTools
+    console line "Launched external handler for 'claude://...'" -- and run
+    this script. It starts Claude.exe with that profile's --user-data-dir plus
+    the link, and the already-running instance picks the link up.
 
     The link is a one-time sign-in code, so this script never prints it.
 
@@ -17,7 +19,8 @@
     The profile name given to Setup.ps1 (its data lives in %APPDATA%\<name>).
 
 .PARAMETER Url
-    The claude:// link. Default: read it from the clipboard.
+    The claude:// link, alone or inside other text. Default: read it from the
+    clipboard.
 
 .EXAMPLE
     .\Send-ClaudeLink.ps1 -Profile Personal
@@ -43,10 +46,13 @@ if (-not (Test-Path $dataDir)) {
 }
 
 if (-not $Url) { $Url = Get-Clipboard -Raw }
-$Url = "$Url".Trim()
-if ($Url -notmatch '^claude://[^\s"]+$') {
-    throw "No claude:// link found. In the browser, right-click 'Open Claude' -> Copy link address, then run this again."
+# Take the link on its own or out of surrounding text, e.g. the browser console
+# line "Launched external handler for 'claude://...'."
+$link = [regex]::Match("$Url", 'claude://[^\s''"<>]+')
+if (-not $link.Success) {
+    throw "No claude:// link found. Copy the 'Launched external handler for ...' line from the browser's DevTools console (see README), then run this again."
 }
+$Url = $link.Value
 
 # The link only works in the window that started the sign-in, so that profile
 # must already be running. (Starting it fresh from here would also leave out

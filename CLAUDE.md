@@ -62,9 +62,14 @@ its own login.
    launch `Claude.exe --user-data-dir=<dir> "<claude:// link>"`: Chromium's
    singleton forwards argv to the running instance, whose `second-instance`
    handler accepts `claude://` arguments. `Launch-Claude.ps1 -Url` does that;
-   `Send-ClaudeLink.ps1 -Profile <name>` reads the link from the clipboard,
-   requires that profile to be running (the link only works in the window that
-   started sign-in), and never prints it (it's a one-time sign-in code).
+   `Send-ClaudeLink.ps1 -Profile <name>` reads the link from the clipboard
+   (extracting it from surrounding text), requires that profile to be running,
+   and never prints it (it's a one-time sign-in code). The Google sign-in link
+   (`claude://login/google-auth?code=…&hop_nonce=…`) is only accepted by the
+   instance that started the sign-in, within 30 minutes; any other instance
+   logs "does not answer a sign-in this app started; ignoring". "Open Claude"
+   is a script button, not a link, so users copy it from the DevTools console
+   line "Launched external handler for '…'".
 
 ## Optional second isolation layer (`CLAUDE_CONFIG_DIR`)
 

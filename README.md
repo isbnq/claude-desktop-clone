@@ -202,7 +202,7 @@ once to add it.
 | "Claude Desktop app not found" | Install it from [claude.ai/download](https://claude.ai/download) and run `Setup.ps1` again. |
 | "`%APPDATA%\<name>` already exists and was not created by this script" | That folder belongs to something else — pick another profile name. If it really is an old Claude profile whose shortcut you deleted, create an empty `.claude-desktop-clone` file in it and re-run `Setup.ps1`. |
 | Shortcut does nothing | Run `scripts\Launch-Claude.ps1 -ProfileDir <dir>` directly in PowerShell to see the error. |
-| Browser sign-in ends on *"Finish sign-in in the Claude app"*, but **Open Claude** brings up your main window and the cloned profile stays signed out | Windows always sends `claude://` links to the default profile. Copy the link and hand it to the right profile with `Send-ClaudeLink.ps1` — see [Signing in to a cloned profile](#signing-in-to-a-cloned-profile). |
+| Browser sign-in ends on *"Finish sign-in in the Claude app"*, but **Open Claude** brings up your main window and the cloned profile stays signed out | Windows always sends `claude://` links to the default profile. Copy the link from the browser's DevTools console and hand it to the right profile with `Send-ClaudeLink.ps1` — see [Signing in to a cloned profile](#signing-in-to-a-cloned-profile). |
 | Second window won't open | Make sure the two shortcuts use **different** `--user-data-dir` paths (check shortcut *Target*). |
 | Icon is blank or grey | Re-run `Setup.ps1` (current versions extract the icon to a stable `bin\claude.ico`, so it survives updates). If a stale thumbnail lingers, clear the icon cache: `ie4uinit.exe -show`, or `Stop-Process -Name explorer -Force; Start-Process explorer`. |
 | **"Failed to start Claude's workspace" / `VHDX file not found`** in a cloned profile | The profile's data dir is **outside `%APPDATA%`**, so the Cowork VM service can't find `rootfs.vhdx`. Re-run `Setup.ps1` (current version puts profiles under `%APPDATA%`). To migrate an existing profile without re-login, move `ClaudeProfiles\<name>` → `%APPDATA%\<name>` and update the shortcut's first argument to `%APPDATA%\<name>`. Do **not** use a junction/symlink for `vm_bundles` — the VM service refuses to open reparse points. |
@@ -214,14 +214,18 @@ Signing in with Google (or anything else that uses your browser) ends with the
 browser opening a one-time `claude://…` link to hand the login back to the app.
 Windows opens that link with the **default** Claude profile — the regular app /
 your main login — never with a profile from `Setup.ps1`, so the cloned window
-waits forever. Hand the link over yourself:
+waits forever. (The main window ignores the link: it carries a nonce that only
+the window which started the sign-in accepts, so your main login is safe.)
+Hand the link over yourself:
 
 1. Keep the profile's window open (e.g. **Claude (Personal)**) and start the
-   sign-in from it.
-2. When the browser asks *"Open Claude?"*, click **Cancel** — otherwise the main
-   window may use up the one-time link.
-3. On the *"Finish sign-in in the Claude app"* page, right-click **Open Claude**
-   → **Copy link address**.
+   sign-in from it. You have 30 minutes from here.
+2. On the *"Finish sign-in in the Claude app"* page, press **F12** to open
+   DevTools and switch to the **Console** tab.
+3. Click **Open Claude** (if the browser asks *"Open Claude?"*, allow it). The
+   console logs *"Launched external handler for 'claude://…'."* — select that
+   line and press **Ctrl+C**. Copying the whole line is fine; the script picks
+   the link out of it.
 4. Run, with the profile's name:
 
    ```powershell
